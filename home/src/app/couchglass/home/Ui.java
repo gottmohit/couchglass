@@ -114,6 +114,11 @@ public final class Ui {
 
     public static final int BODY = 0, BOLD = 1, DISPLAY = 2;
 
+    /** The typeface for a style, for views that draw their own text. */
+    public static Typeface face(int style) {
+        return style == DISPLAY ? display : style == BOLD ? bodyBold : body;
+    }
+
     public static void focusLift(View v, float radiusPx, float scale) {
         focusLift(v, radiusPx, scale, ACCENT);
     }
@@ -143,6 +148,14 @@ public final class Ui {
                     .translationY(has && lift ? -dp(c, 4) : 0).translationZ(has ? dp(c, lift ? 8 : 3) : 0)
                     .setDuration(150).start();
         });
+    }
+
+    public static int[] orbColors() {
+        return orbs;
+    }
+
+    public static float orbAlpha() {
+        return orbAlpha;
     }
 
     /** Soft colour fields for the wallpaper, drawn at half resolution (they have no detail to lose). */

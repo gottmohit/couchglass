@@ -26,6 +26,18 @@ It is two small apps that work together:
 - Weather, Cast and mirroring panel, input switcher, voice search, and quick tiles for sleep timer,
   picture, sound and power off.
 - Built for the remote: every move goes to the neighbour you'd expect, and popups keep focus inside.
+- A screensaver with four scenes that change every six minutes (left and right on the remote
+  switch them):
+  - **Sky**: the real sky outside. Its colour follows today's sunrise and sunset, the sun or moon
+    travels its arc, and today's weather shows as clouds, rain or stars.
+  - **Drift**: silk ribbons flowing through a slow current, in your theme's colours.
+  - **Flip clock**: a big split-flap clock over your theme's glow.
+  - **Up next**: the show you were watching, with its artwork. Press OK to resume it.
+
+  When the screensaver starts it asks Care to clean memory. A minute before the TV would drop into
+  standby, it counts down and does a full shutdown instead (it waits if music is playing).
+  Turn it on with
+  `adb shell settings put secure screensaver_components app.couchglass.home/app.couchglass.home.GlassDream`.
 - About 100 MB in use on a 1080p TV, with no background service of its own.
 
 **Couchglass Care**
