@@ -1,0 +1,14 @@
+# Build output
+out/
+*.apk
+*.idsig
+
+# Signing keys never belong in the repo
+*.jks
+*.keystore
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
