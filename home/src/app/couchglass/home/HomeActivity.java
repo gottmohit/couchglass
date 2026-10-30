@@ -372,10 +372,10 @@ public class HomeActivity extends Activity {
         buttons.setClipChildren(false);
         playBtn = pillButton("Play", true);
         playBtn.setOnClickListener(v -> heroPrimary());
-        buttons.addView(playBtn, new LinearLayout.LayoutParams(-2, dp(33)));
-        cleanPlayBtn = pillButton("Clean memory, then play", false);
+        buttons.addView(playBtn, new LinearLayout.LayoutParams(-2, dp(27)));
+        cleanPlayBtn = pillButton("Clean memory first", false);
         cleanPlayBtn.setOnClickListener(v -> heroCleanFirst());
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, dp(33));
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, dp(27));
         cp.leftMargin = dp(8);
         buttons.addView(cleanPlayBtn, cp);
         text.addView(buttons);
@@ -635,7 +635,7 @@ public class HomeActivity extends Activity {
             if (w.progressPct > 0) heroBar.addView(new ProgressBarView(this, w.progressPct), new FrameLayout.LayoutParams(-1, -1));
             boolean show = w.posterUri != null || w.session != null; // we know the show, not just the app
             playBtn.setText(show ? "▶  Resume" : "▶  Open " + (a == null ? "app" : a.label));
-            cleanPlayBtn.setText(show ? "Clean memory, then watch" : "Clean memory, then open");
+            cleanPlayBtn.setText("Clean memory first");
             cleanPlayBtn.setVisibility(View.VISIBLE);
             // No poster: no logo either, just a soft glow in the app's own colour.
             heroArt.setImageDrawable(w.posterUri != null ? null : brandGlow(w.fallbackArt));
@@ -659,7 +659,7 @@ public class HomeActivity extends Activity {
             heroTitle.setText(Apps.FEATURED_GAME.equals(featured.pkg) ? "Beach Buggy Racing" : featured.label);
             heroArt.setImageDrawable(featured.banner);
             playBtn.setText("Play");
-            cleanPlayBtn.setText("Clean memory, then play");
+            cleanPlayBtn.setText("Clean memory first");
             cleanPlayBtn.setVisibility(View.VISIBLE);
             updateHeroSub();
         }
@@ -1050,7 +1050,7 @@ public class HomeActivity extends Activity {
         ui.removeCallbacks(cleanTimeout);
         ui.removeCallbacks(allowHint);
         cleanBtn.setText("Clean now");
-        cleanPlayBtn.setText(heroWatch != null ? "Clean memory, then watch" : "Clean memory, then play");
+        cleanPlayBtn.setText("Clean memory first");
         if (error != null) {
             memSub.setText(error.contains("allow") || error.contains("Waiting")
                     ? "Open Couchglass Care once and allow debugging" : "Couldn't clean: " + error);
@@ -1316,19 +1316,20 @@ public class HomeActivity extends Activity {
     }
 
     private TextView pillButton(String label, boolean primary) {
-        TextView b = Ui.text(this, label, primary ? 11 : 10, primary ? Color.WHITE : Ui.INK, Ui.BOLD);
+        // Compact, so the billboard's artwork and title stay the heroes.
+        TextView b = Ui.text(this, label, primary ? 10 : 9, primary ? Color.WHITE : Ui.INK, Ui.BOLD);
         b.setGravity(Gravity.CENTER);
-        b.setPadding(dp(primary ? 20 : 15), 0, dp(primary ? 20 : 15), 0);
+        b.setPadding(dp(primary ? 15 : 11), 0, dp(primary ? 15 : 11), 0);
         if (primary) {
             GradientDrawable g = new GradientDrawable();
             g.setColor(Ui.ACCENT);
-            g.setCornerRadius(dp(17));
+            g.setCornerRadius(dp(13.5f));
             b.setBackground(g);
             b.setElevation(dp(6));
         } else {
-            b.setBackground(new Soft(Soft.Kind.GLASS, dp(16.5f), dp(5), Ui.CHIP));
+            b.setBackground(new Soft(Soft.Kind.GLASS, dp(13.5f), dp(4), Ui.CHIP));
         }
-        Ui.focusGrow(b, dp(16.5f), 1.06f, primary ? Ui.INK : Ui.ACCENT);
+        Ui.focusGrow(b, dp(13.5f), 1.06f, primary ? Ui.INK : Ui.ACCENT);
         return b;
     }
 
