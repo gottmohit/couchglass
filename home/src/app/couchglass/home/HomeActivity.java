@@ -1228,7 +1228,7 @@ public class HomeActivity extends Activity {
         View i = Icons.view(this, icon, dp(14), Ui.INK_SOFT);
         b.addView(i, new FrameLayout.LayoutParams(dp(14), dp(14), Gravity.CENTER));
         b.setContentDescription(label);
-        Ui.focusGrow(b, dp(16), 1.1f);
+        Ui.focusGrow(b, dp(16), 1.06f);
         b.setOnClickListener(click);
         return b;
     }
@@ -1246,7 +1246,7 @@ public class HomeActivity extends Activity {
         } else {
             b.setBackground(new Soft(Soft.Kind.GLASS, dp(16.5f), dp(5), Ui.CHIP));
         }
-        Ui.focusLift(b, dp(16.5f), 1.06f, primary ? Ui.INK : Ui.ACCENT);
+        Ui.focusGrow(b, dp(16.5f), 1.06f, primary ? Ui.INK : Ui.ACCENT);
         return b;
     }
 
@@ -1255,7 +1255,7 @@ public class HomeActivity extends Activity {
         b.setGravity(Gravity.CENTER);
         b.setPadding(dp(12), 0, dp(12), 0);
         b.setBackground(new Soft(Soft.Kind.NEU_UP, dp(15), dp(4.5f), Ui.GROUND));
-        Ui.focusLift(b, dp(15), 1.06f);
+        Ui.focusGrow(b, dp(15), 1.06f);
         return b;
     }
 
@@ -1358,7 +1358,7 @@ public class HomeActivity extends Activity {
         r.setBackground(new Soft(Soft.Kind.NEU_UP, dp(15), dp(4.5f), Ui.GROUND));
         r.addView(Ui.text(this, label, 9, Ui.MUTED, Ui.BODY), new LinearLayout.LayoutParams(0, -2, 1));
         r.addView(Ui.text(this, value, 9.5f, Ui.INK, Ui.BOLD));
-        Ui.focusLift(r, dp(15), 1.04f);
+        Ui.focusGrow(r, dp(15), 1.04f);
         r.setOnClickListener(v -> onPress.run());
         return r;
     }

@@ -133,7 +133,12 @@ public final class Ui {
 
     /** For rows of small controls (the top bar): grow and ring, but stay in line with neighbours. */
     public static void focusGrow(View v, float radiusPx, float scale) {
-        focus(v, radiusPx, scale, ACCENT, false);
+        focusGrow(v, radiusPx, scale, ACCENT);
+    }
+
+    /** Buttons beside each other: grow and ring in place, so a focused button stays level with its neighbours. */
+    public static void focusGrow(View v, float radiusPx, float scale, int ringColor) {
+        focus(v, radiusPx, scale, ringColor, false);
     }
 
     private static void focus(View v, float radiusPx, float scale, int ringColor, boolean lift) {
