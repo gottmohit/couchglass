@@ -13,7 +13,10 @@ import android.provider.Settings;
 import android.service.dreams.DreamService;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.graphics.Outline;
 import android.view.View;
+import android.view.ViewOutlineProvider;
+import android.widget.ImageView;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -42,7 +45,8 @@ public class GlassDream extends DreamService {
     private View scene;
     private int sceneIndex;
     private long sceneSince;
-    private LinearLayout pill;
+    private LinearLayout pill, ticket;
+    private Scenes.Pick ticketPick; // the show OK resumes from any scene
     private TextView pillClock, banner;
     private List<Scenes.Pick> picks = new ArrayList<>();
     private long shutdownAt; // uptime millis; 0 = never
@@ -62,6 +66,7 @@ public class GlassDream extends DreamService {
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(0xFF000000);
+        root.setClipChildren(false); // glass shadows spill past their cards
         stage = new FrameLayout(this);
         root.addView(stage, new FrameLayout.LayoutParams(-1, -1));
 
@@ -81,6 +86,17 @@ public class GlassDream extends DreamService {
         pp.leftMargin = dp(56);
         pp.bottomMargin = dp(48);
         root.addView(pill, pp);
+
+        // "Up next" ticket: the show you were watching, on every scene. OK resumes it from anywhere.
+        ticket = new LinearLayout(this);
+        ticket.setGravity(Gravity.CENTER_VERTICAL);
+        ticket.setPadding(dp(10), dp(10), dp(20), dp(10));
+        ticket.setBackground(new Soft(Soft.Kind.GLASS, dp(20), dp(12), Ui.GLASS));
+        ticket.setAlpha(0);
+        FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
+        tp.rightMargin = dp(56);
+        tp.bottomMargin = dp(48);
+        root.addView(ticket, tp);
 
         banner = Ui.text(this, "", 13, Ui.INK, Ui.BOLD);
         banner.setPadding(dp(18), dp(9), dp(18), dp(9));
@@ -127,7 +143,7 @@ public class GlassDream extends DreamService {
             return true;
         }
         if (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER) {
-            Scenes.Pick pick = scene instanceof Scenes.UpNext ? ((Scenes.UpNext) scene).current() : null;
+            Scenes.Pick pick = scene instanceof Scenes.UpNext ? ((Scenes.UpNext) scene).current() : ticketPick;
             if (pick != null && pick.intent != null) {
                 if (up) {
                     try {
@@ -181,8 +197,62 @@ public class GlassDream extends DreamService {
                 }
             } catch (Exception ignored) {
             }
-            ui.post(() -> picks = out);
+            ui.post(() -> {
+                picks = out;
+                fillTicket();
+            });
         }, "dream-picks").start();
+    }
+
+    private void fillTicket() {
+        ticketPick = null;
+        for (Scenes.Pick k : picks) {
+            if (k.intent != null) {
+                ticketPick = k;
+                break;
+            }
+        }
+        ticket.removeAllViews();
+        if (ticketPick == null) return;
+        ImageView art = new ImageView(this);
+        art.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        art.setImageBitmap(ticketPick.poster);
+        art.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View v, Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), dp(12));
+            }
+        });
+        art.setClipToOutline(true);
+        ticket.addView(art, new LinearLayout.LayoutParams(dp(128), dp(72)));
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setPadding(dp(14), 0, 0, 0);
+        TextView kicker = Ui.text(this, ticketPick.app.isEmpty() ? "UP NEXT" : "UP NEXT  ·  " + ticketPick.app.toUpperCase(java.util.Locale.ROOT),
+                9, Ui.MUTED, Ui.BOLD);
+        kicker.setLetterSpacing(0.1f);
+        col.addView(kicker);
+        TextView title = Ui.text(this, ticketPick.title, 16, Ui.INK, Ui.DISPLAY);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setMaxWidth(dp(240));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.topMargin = dp(3);
+        col.addView(title, lp);
+        TextView hint = Ui.text(this, "OK  ▶  Resume" + (ticketPick.meta.isEmpty() ? "" : "   ·   " + ticketPick.meta), 11, Ui.INK_SOFT, Ui.BODY);
+        hint.setSingleLine(true);
+        hint.setMaxWidth(dp(240));
+        LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-2, -2);
+        hp.topMargin = dp(5);
+        col.addView(hint, hp);
+        ticket.addView(col);
+        showTicket();
+    }
+
+    /** The ticket shows on every scene except "Up next", which is the same idea full screen. */
+    private void showTicket() {
+        boolean on = ticketPick != null && sceneIndex != Scenes.UP_NEXT;
+        ticket.animate().alpha(on ? 1 : 0).setStartDelay(on ? 1500 : 0).setDuration(900).start();
     }
 
     private boolean available(int i) {
@@ -218,6 +288,7 @@ public class GlassDream extends DreamService {
         scene = next;
         stage.addView(next, new FrameLayout.LayoutParams(-1, -1));
         pill.animate().alpha(i == Scenes.DRIFT ? 1 : 0).setDuration(800).start();
+        if (ticket != null) showTicket();
         if (old != null && fade) {
             next.setAlpha(0);
             next.animate().alpha(1).setDuration(1200).withEndAction(() -> stage.removeView(old)).start();
@@ -246,7 +317,9 @@ public class GlassDream extends DreamService {
         public void run() {
             long up = SystemClock.uptimeMillis();
             pillClock.setText(Scenes.time(GlassDream.this, new Date()));
-            pill.setTranslationX((float) Math.cos(System.currentTimeMillis() / 60_000 % 12 / 12.0 * 2 * Math.PI) * dp(20));
+            float drift = (float) Math.cos(System.currentTimeMillis() / 60_000 % 12 / 12.0 * 2 * Math.PI) * dp(20);
+            pill.setTranslationX(drift);
+            ticket.setTranslationX(-drift); // both drift a little each minute so nothing burns in
 
             if (up - sceneSince > SCENE_MS) step(1);
 
@@ -266,7 +339,8 @@ public class GlassDream extends DreamService {
                     counting = true;
                 }
             }
-            if (!counting && up < hintUntil) banner.setText("◀  ▶   change scene   ·   " + Scenes.NAMES[sceneIndex]);
+            if (!counting && up < hintUntil) banner.setText("◀  ▶   change scene   ·   " + Scenes.NAMES[sceneIndex]
+                    + (ticketPick != null || sceneIndex == Scenes.UP_NEXT ? "   ·   OK resume" : ""));
             banner.setVisibility(counting || up < hintUntil || "Turning off…".contentEquals(banner.getText()) ? View.VISIBLE : View.GONE);
             ui.removeCallbacks(this);
             ui.postDelayed(this, 1000);

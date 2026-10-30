@@ -317,12 +317,6 @@ final class Scenes {
                 }
             }
 
-            // Sunrise and sunset under the ends of the arc.
-            small.setTextAlign(Paint.Align.CENTER);
-            small.setTextSize(15 * dp);
-            c.drawText("Sunrise " + time(getContext(), new Date(rise)), cx - rx, hy + 52 * dp, small);
-            c.drawText("Sunset " + time(getContext(), new Date(set)), cx + rx, hy + 52 * dp, small);
-
             // The time.
             float[] n = nudge(24, 14);
             float x0 = 84 * dp + n[0], y0 = 150 * dp + n[1];
@@ -330,10 +324,13 @@ final class Scenes {
             c.drawText(time(getContext(), new Date(now)), x0, y0, big);
             small.setTextSize(19 * dp);
             c.drawText(DateFormat.format("EEEE, d MMMM", now).toString(), x0 + 4 * dp, y0 + 38 * dp, small);
+            small.setTextSize(16 * dp);
+            float line = y0 + 66 * dp;
             if (w != null) {
-                small.setTextSize(16 * dp);
-                c.drawText(weatherLine(w), x0 + 4 * dp, y0 + 66 * dp, small);
+                c.drawText(weatherLine(w), x0 + 4 * dp, line, small);
+                line += 26 * dp;
             }
+            c.drawText("Sunrise " + time(getContext(), new Date(rise)) + "   ·   Sunset " + time(getContext(), new Date(set)), x0 + 4 * dp, line, small);
             next(kind == 3 || kind == 4 ? 40 : 66);
         }
     }
@@ -455,9 +452,9 @@ final class Scenes {
                 }
             }
 
-            float th = 300 * dp, tw = 290 * dp, gap = 28 * dp;
+            float th = 260 * dp, tw = 250 * dp, gap = 24 * dp; // leaves the bottom right for the Up next ticket
             float[] n = nudge(30, 18);
-            float left = (W - 2 * tw - gap) / 2 + n[0], topY = (H - th) / 2 - 30 * dp + n[1];
+            float left = (W - 2 * tw - gap) / 2 + n[0], topY = (H - th) / 2 - 110 * dp + n[1];
             boolean busy = false;
             for (int i = 0; i < 2; i++) {
                 float pr = Math.min(1, (up - flipAt[i]) / (float) FLIP_MS);
@@ -474,7 +471,7 @@ final class Scenes {
             label.setTextSize(20 * dp);
             String line = DateFormat.format("EEEE, d MMMM", now).toString();
             if (w != null) line += "   ·   " + w.temp + "°  " + w.label();
-            c.drawText(line, W / 2 + n[0], topY + th + 62 * dp, label);
+            c.drawText(line, W / 2 + n[0], topY + th + 52 * dp, label);
             next(busy ? 16 : 66);
         }
 

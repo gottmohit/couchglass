@@ -36,6 +36,9 @@ It is two small apps that work together:
   - **Flip clock**: a big split-flap clock over your theme's glow.
   - **Up next**: the show you were watching, with its artwork. Press OK to resume it.
 
+  Every scene also carries a small glass "Up next" ticket for the show you were watching: press OK
+  on any scene and it resumes straight away, without going through Home.
+
   When the screensaver starts it asks Care to clean memory. A minute before the TV would drop into
   standby, it counts down and does a full shutdown instead (it waits if music is playing).
   Turn it on with
