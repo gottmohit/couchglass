@@ -21,7 +21,9 @@ It is two small apps that work together:
   or Auto (Mist by day, Dusk after sunset).
 - Continue watching from Android TV's Watch Next list, with posters, episode and time left.
 - Your apps as their own TV banners; hold OK on one to move or hide it.
-- Game night card for your favourite game, with how many controllers are connected.
+- An "Up next" billboard: the show you were last watching, with its artwork, episode and time left.
+  Resume is already selected when Home opens, so one press of OK takes you back into it. Connect a
+  game controller and the billboard turns into Game night for your favourite game.
 - Live TV tab with the channels your TV's inputs publish.
 - Weather, Cast and mirroring panel, input switcher, voice search, and quick tiles for sleep timer,
   picture, sound and power off.

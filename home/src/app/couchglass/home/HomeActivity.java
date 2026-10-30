@@ -66,6 +66,11 @@ public class HomeActivity extends Activity {
     private FrameLayout root;
     private TextView clock, date, heroTitle, heroSub, memBig, memSub, cleanBtn, playBtn, cleanPlayBtn, inputBtnLabel;
     private ImageView heroArt;
+    private TextView heroKicker;
+    private FrameLayout heroBar;
+    private Apps.Continue heroWatch; // the show the hero offers to resume; null = Game night
+    private List<Apps.Continue> lastContinue = new ArrayList<>();
+    private Runnable afterClean;
     private RingView ring;
     private LinearLayout continueRow, appsRow, inputMenu, tabsBar;
     private View inputBtn, castBtn, wifiBtn, settingsBtn, searchBtn;
@@ -75,7 +80,6 @@ public class HomeActivity extends Activity {
     private TextView gridTitle, sleepValue, powerValue;
     private String tab = "Home";
     private boolean powerArmed, cleaning;
-    private String launchAfterClean;
 
     private final BroadcastReceiver timeTick = new BroadcastReceiver() {
         @Override
@@ -135,6 +139,7 @@ public class HomeActivity extends Activity {
         registerReceiver(timeTick, new IntentFilter(Intent.ACTION_TIME_TICK));
         updateClock();
         ui.post(memTick);
+        getSystemService(android.hardware.input.InputManager.class).registerInputDeviceListener(padListener, ui);
         loadContinue();
         updateHeroSub();
         showTab("Home");
@@ -152,6 +157,7 @@ public class HomeActivity extends Activity {
         super.onPause();
         unregisterReceiver(timeTick);
         ui.removeCallbacks(memTick);
+        getSystemService(android.hardware.input.InputManager.class).unregisterInputDeviceListener(padListener);
         disarmPower();
     }
 
@@ -319,40 +325,55 @@ public class HomeActivity extends Activity {
         LinearLayout r = row();
         r.setClipChildren(false);
 
-        // Game night card (glass)
-        LinearLayout card = row();
+        // The billboard: what to do next, with its artwork filling the right side. It is the show you
+        // were watching (Resume, focused when Home opens, so one OK resumes it), or Game night when a
+        // controller is connected. Always dark, like a screen within the screen, whatever the theme.
+        FrameLayout card = new FrameLayout(this);
         card.setClipChildren(false);
-        card.setPadding(dp(22), dp(17), dp(18), dp(17));
-        card.setBackground(new Soft(Soft.Kind.GLASS, dp(18), dp(15), Ui.GLASS));
+        card.setBackground(new Soft(Soft.Kind.PLAIN, dp(18), dp(15), BILLBOARD)); // flat, so the artwork fades in cleanly
+        heroArt = new ImageView(this);
+        heroArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        roundClip(heroArt, dp(18));
+        card.addView(heroArt, new FrameLayout.LayoutParams(dp(150 * 16 / 9), -1, Gravity.END));
+        View scrim = new View(this); // fades the artwork's left edge into the card
+        scrim.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{BILLBOARD, (BILLBOARD & 0xFFFFFF) | 0x99000000, BILLBOARD & 0xFFFFFF}));
+        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(dp(160), -1, Gravity.END);
+        slp.rightMargin = dp(150 * 16 / 9 - 154); // starts just before the artwork, covering its edge
+        card.addView(scrim, slp);
+
         LinearLayout text = column();
         text.setClipChildren(false);
-        text.addView(Ui.text(this, "GAME NIGHT", 8.5f, Ui.MUTED, Ui.BOLD));
-        heroTitle = Ui.text(this, "", 28, Ui.INK, Ui.DISPLAY);
+        text.setPadding(dp(22), dp(17), dp(18), dp(17));
+        heroKicker = Ui.text(this, "GAME NIGHT", 8.5f, 0xB3FFFFFF, Ui.BOLD);
+        heroKicker.setLetterSpacing(0.08f);
+        text.addView(heroKicker);
+        heroTitle = Ui.text(this, "", 28, 0xFFFFFFFF, Ui.DISPLAY);
         heroTitle.setLetterSpacing(-0.02f);
-        heroTitle.setMaxLines(2);
+        heroTitle.setMaxLines(1);
+        heroTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         text.addView(heroTitle, lp(-2, -2, 5));
-        heroSub = Ui.text(this, "", 10.5f, Ui.INK_SOFT, Ui.BODY);
+        heroSub = Ui.text(this, "", 10.5f, 0xD9FFFFFF, Ui.BODY);
+        heroSub.setSingleLine(true);
         text.addView(heroSub, lp(-2, -2, 5));
+        heroBar = new FrameLayout(this);
+        text.addView(heroBar, lp(dp(220), dp(2.5f), 8));
         View spacer = new View(this);
         text.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1));
         LinearLayout buttons = row();
         buttons.setClipChildren(false);
         playBtn = pillButton("Play", true);
-        playBtn.setOnClickListener(v -> launchFeatured());
+        playBtn.setOnClickListener(v -> heroPrimary());
         buttons.addView(playBtn, new LinearLayout.LayoutParams(-2, dp(33)));
         cleanPlayBtn = pillButton("Clean memory, then play", false);
-        cleanPlayBtn.setOnClickListener(v -> cleanThenPlay());
+        cleanPlayBtn.setOnClickListener(v -> heroCleanFirst());
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, dp(33));
         cp.leftMargin = dp(8);
         buttons.addView(cleanPlayBtn, cp);
         text.addView(buttons);
-        card.addView(text, new LinearLayout.LayoutParams(0, -1, 1));
-        heroArt = new ImageView(this);
-        heroArt.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        roundClip(heroArt, dp(13));
-        LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(dp(205), -1);
-        ap.leftMargin = dp(18);
-        card.addView(heroArt, ap);
+        FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(-1, -1);
+        tlp.rightMargin = dp(150);
+        card.addView(text, tlp);
         r.addView(card, new LinearLayout.LayoutParams(0, -1, 1));
 
         // Right column: Couchglass Care memory + quick controls
@@ -582,28 +603,110 @@ public class HomeActivity extends Activity {
         return tile;
     }
 
+    private static final int BILLBOARD = 0xFF0E1119; // opaque, so the fade over the artwork has no seam
+
+    /** Picks the billboard: Game night while a controller is connected, else the show to resume. */
     private void fillHero() {
-        if (featured == null) {
+        heroWatch = null;
+        if (Apps.gamepadsConnected() == 0 || featured == null) {
+            for (Apps.Continue w : lastContinue) {
+                if (w.intent != null && w.posterUri != null) {
+                    heroWatch = w;
+                    break;
+                }
+            }
+        }
+        heroBar.removeAllViews();
+        if (heroWatch != null) {
+            Apps.Continue w = heroWatch;
+            Apps.App a = repo.find(apps, w.pkg);
+            heroKicker.setText(a == null ? "UP NEXT" : "UP NEXT  ·  " + a.label.toUpperCase(java.util.Locale.ROOT));
+            heroTitle.setText(w.title);
+            heroSub.setText(w.meta == null || w.meta.isEmpty() ? "Pick up where you left off" : w.meta);
+            if (w.progressPct > 0) heroBar.addView(new ProgressBarView(this, w.progressPct), new FrameLayout.LayoutParams(-1, -1));
+            playBtn.setText("▶  Resume");
+            cleanPlayBtn.setText("Clean memory, then watch");
+            cleanPlayBtn.setVisibility(View.VISIBLE);
+            heroArt.setImageDrawable(w.fallbackArt);
+            bg.execute(() -> {
+                Bitmap b = repo.loadPoster(w.posterUri, dp(300));
+                if (b != null) ui.post(() -> {
+                    if (heroWatch == w) heroArt.setImageBitmap(b);
+                });
+            });
+        } else if (featured == null) {
+            heroKicker.setText("GAME NIGHT");
             heroTitle.setText("No games yet");
             heroArt.setImageDrawable(null);
             playBtn.setText("Open Play Store");
             cleanPlayBtn.setVisibility(View.GONE);
+            updateHeroSub();
         } else {
+            heroKicker.setText("GAME NIGHT");
             heroTitle.setText(Apps.FEATURED_GAME.equals(featured.pkg) ? "Beach Buggy Racing" : featured.label);
             heroArt.setImageDrawable(featured.banner);
             playBtn.setText("Play");
+            cleanPlayBtn.setText("Clean memory, then play");
             cleanPlayBtn.setVisibility(View.VISIBLE);
+            updateHeroSub();
         }
-        updateHeroSub();
     }
 
     private void updateHeroSub() {
-        if (heroSub == null) return;
+        if (heroSub == null || heroWatch != null) return;
         int pads = Apps.gamepadsConnected();
         String pads2 = pads == 0 ? "Connect a controller to play" : pads == 1 ? "1 controller connected" : pads + " controllers connected";
         String extra = featured != null && Apps.FEATURED_GAME.equals(featured.pkg) ? "Split screen · " : "";
         heroSub.setText(extra + pads2);
     }
+
+    private void heroPrimary() {
+        if (heroWatch != null) resume(heroWatch);
+        else launchFeatured();
+    }
+
+    private void heroCleanFirst() {
+        Runnable go;
+        String pkg;
+        if (heroWatch != null) {
+            Apps.Continue w = heroWatch;
+            go = () -> resume(w);
+            pkg = w.pkg;
+        } else if (featured != null) {
+            go = this::launchFeatured;
+            pkg = featured.pkg;
+        } else {
+            return;
+        }
+        if (clean(pkg)) afterClean = go;
+        else go.run();
+    }
+
+    private void resume(Apps.Continue w) {
+        Intent i = w.intent;
+        if (i == null) {
+            Apps.App a = repo.find(apps, w.pkg);
+            if (a != null) i = repo.launchIntent(a);
+        }
+        if (i != null) open(new Intent(i).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    }
+
+    // A controller plugged in (or switched off) changes the billboard straight away.
+    private final android.hardware.input.InputManager.InputDeviceListener padListener = new android.hardware.input.InputManager.InputDeviceListener() {
+        @Override
+        public void onInputDeviceAdded(int id) {
+            fillHero();
+        }
+
+        @Override
+        public void onInputDeviceRemoved(int id) {
+            fillHero();
+        }
+
+        @Override
+        public void onInputDeviceChanged(int id) {
+        }
+    };
 
     private void loadContinue() {
         if (continueRow == null) return;
@@ -614,7 +717,11 @@ public class HomeActivity extends Activity {
         });
     }
 
-    private void fillContinue(List<Apps.Continue> items) {
+    private void fillContinue(List<Apps.Continue> all) {
+        lastContinue = all;
+        fillHero();
+        List<Apps.Continue> items = new ArrayList<>(all);
+        items.remove(heroWatch); // it's on the billboard already
         continueRow.removeAllViews();
         if (items.isEmpty()) {
             TextView t = Ui.text(this, "Shows you start in YouTube, Prime Video and other apps will appear here.", 10, Ui.MUTED, Ui.BODY);
@@ -674,14 +781,7 @@ public class HomeActivity extends Activity {
 
         card.setContentDescription(w.title);
         Ui.focusLift(card, radius, 1.06f);
-        card.setOnClickListener(v -> {
-            Intent i = w.intent;
-            if (i == null) {
-                Apps.App a = repo.find(apps, w.pkg);
-                if (a != null) i = repo.launchIntent(a);
-            }
-            if (i != null) open(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        });
+        card.setOnClickListener(v -> resume(w));
         return card;
     }
 
@@ -836,11 +936,6 @@ public class HomeActivity extends Activity {
         open(repo.launchIntent(featured));
     }
 
-    private void cleanThenPlay() {
-        if (featured == null) return;
-        if (!clean(featured.pkg)) launchFeatured();
-    }
-
     /** Asks Couchglass Care to clean. Returns false if Couchglass Care isn't installed. */
     private boolean clean(String thenLaunch) {
         if (cleaning) return true;
@@ -854,7 +949,7 @@ public class HomeActivity extends Activity {
             return false;
         }
         cleaning = true;
-        launchAfterClean = thenLaunch;
+        afterClean = null;
         cleanBtn.setText("Cleaning…");
         if (thenLaunch != null) cleanPlayBtn.setText("Cleaning…");
         ui.postDelayed(cleanTimeout, 70000);
@@ -873,7 +968,7 @@ public class HomeActivity extends Activity {
         ui.removeCallbacks(cleanTimeout);
         ui.removeCallbacks(allowHint);
         cleanBtn.setText("Clean now");
-        cleanPlayBtn.setText("Clean memory, then play");
+        cleanPlayBtn.setText(heroWatch != null ? "Clean memory, then watch" : "Clean memory, then play");
         if (error != null) {
             memSub.setText(error.contains("allow") || error.contains("Waiting")
                     ? "Open Couchglass Care once and allow debugging" : "Couldn't clean: " + error);
@@ -881,9 +976,9 @@ public class HomeActivity extends Activity {
             memSub.setText(closed == 0 ? "Already clean" : "Closed " + closed + " apps · freed " + (freedKb / 1024) + " MB");
         }
         updateMemory();
-        String next = launchAfterClean;
-        launchAfterClean = null;
-        if (next != null && featured != null && featured.pkg.equals(next)) launchFeatured();
+        Runnable next = afterClean;
+        afterClean = null;
+        if (next != null) next.run();
     }
 
     private void cycleSleep() {
