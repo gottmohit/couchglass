@@ -27,6 +27,8 @@ It is two small apps that work together:
   app as a last resort.
   Resume is already selected when Home opens, so one press of OK takes you back into it. Connect a
   game controller and the billboard turns into Game night for your favourite game.
+  Browse the Continue watching row and the billboard follows: pause on a card and it becomes that
+  show, with its artwork and colours.
 - Ambient colour: the home screen's glow takes its colours from the show on the billboard (One
   Piece's blue sky and straw-hat yellow, Game of Thrones' dark teal) and cross-fades when the show
   changes. The screensaver glows in the same colours. Game night and app-only entries use the

@@ -624,30 +624,10 @@ public class HomeActivity extends Activity {
                 }
             }
         }
-        heroBar.removeAllViews();
         if (heroWatch != null) {
-            Apps.Continue w = heroWatch;
-            Apps.App a = repo.find(apps, w.pkg);
-            heroKicker.setText(a == null ? "UP NEXT" : "UP NEXT  ·  " + a.label.toUpperCase(java.util.Locale.ROOT));
-            heroTitle.setText(w.title);
-            heroSub.setText(heroLine(w));
-            heroLeft.setText(w.left == null ? "" : w.left);
-            if (w.progressPct > 0) heroBar.addView(new ProgressBarView(this, w.progressPct), new FrameLayout.LayoutParams(-1, -1));
-            boolean show = w.posterUri != null || w.session != null; // we know the show, not just the app
-            playBtn.setText(show ? "▶  Resume" : "▶  Open " + (a == null ? "app" : a.label));
-            cleanPlayBtn.setText("Clean memory first");
-            cleanPlayBtn.setVisibility(View.VISIBLE);
-            // No poster: no logo either, just a soft glow in the app's own colour.
-            heroArt.setImageDrawable(w.posterUri != null ? null : brandGlow(w.fallbackArt));
-            if (w.posterUri != null) bg.execute(() -> {
-                Bitmap b = trimBars(repo.loadPoster(w.posterUri, dp(300)));
-                if (b != null) ui.post(() -> {
-                    if (heroWatch == w) heroArt.setImageBitmap(b);
-                });
-                ambient(b == null ? null : Ui.palette(b), w.posterUri);
-            });
-            else ambient(null, null);
+            showWatch(heroWatch);
         } else if (featured == null) {
+            heroBar.removeAllViews();
             ambient(null, null);
             heroLeft.setText("");
             heroKicker.setText("GAME NIGHT");
@@ -657,6 +637,7 @@ public class HomeActivity extends Activity {
             cleanPlayBtn.setVisibility(View.GONE);
             updateHeroSub();
         } else {
+            heroBar.removeAllViews();
             ambient(null, null);
             heroLeft.setText("");
             heroKicker.setText("GAME NIGHT");
@@ -732,6 +713,64 @@ public class HomeActivity extends Activity {
             if (((p >> 16) & 255) + ((p >> 8) & 255) + (p & 255) > 60) return false;
         }
         return true;
+    }
+
+    /** Posters already shown on the billboard, so browsing back and forth doesn't fetch them again. */
+    private final android.util.LruCache<String, Bitmap> posters = new android.util.LruCache<>(8);
+
+    /** Puts a show on the billboard: its name, episode, time left, artwork and colours. */
+    private void showWatch(Apps.Continue w) {
+        heroWatch = w;
+        heroBar.removeAllViews();
+        Apps.App a = repo.find(apps, w.pkg);
+        heroKicker.setText(a == null ? "UP NEXT" : "UP NEXT  ·  " + a.label.toUpperCase(java.util.Locale.ROOT));
+        heroTitle.setText(w.title);
+        heroSub.setText(heroLine(w));
+        heroLeft.setText(w.left == null ? "" : w.left);
+        if (w.progressPct > 0) heroBar.addView(new ProgressBarView(this, w.progressPct), new FrameLayout.LayoutParams(-1, -1));
+        boolean show = w.posterUri != null || w.session != null; // we know the show, not just the app
+        playBtn.setText(show ? "▶  Resume" : "▶  Open " + (a == null ? "app" : a.label));
+        cleanPlayBtn.setText("Clean memory first");
+        cleanPlayBtn.setVisibility(View.VISIBLE);
+        if (w.posterUri == null) {
+            heroArt.setImageDrawable(brandGlow(w.fallbackArt)); // no poster: no logo either, a glow in the app's colour
+            ambient(null, null);
+            return;
+        }
+        Bitmap cached = posters.get(w.posterUri);
+        if (cached != null) {
+            setHeroArt(cached);
+            bg.execute(() -> ambient(Ui.palette(cached), w.posterUri));
+            return;
+        }
+        bg.execute(() -> {
+            Bitmap b = trimBars(repo.loadPoster(w.posterUri, dp(300)));
+            if (b != null) {
+                posters.put(w.posterUri, b);
+                ui.post(() -> {
+                    if (heroWatch == w) setHeroArt(b);
+                });
+            }
+            if (heroWatch == w) ambient(b == null ? null : Ui.palette(b), w.posterUri);
+        });
+    }
+
+    private void setHeroArt(Bitmap b) {
+        heroArt.setAlpha(0.35f);
+        heroArt.setImageBitmap(b);
+        heroArt.animate().alpha(1).setDuration(350).start();
+    }
+
+    /** Browsing Continue watching: after a short pause on a card, the billboard becomes that show. */
+    private Runnable preview;
+
+    private void previewSoon(Apps.Continue w) {
+        if (preview != null) ui.removeCallbacks(preview);
+        if (w.intent == null || (w.posterUri == null && w.fallbackArt == null)) return;
+        preview = () -> {
+            if (heroWatch != w) showWatch(w);
+        };
+        ui.postDelayed(preview, 350);
     }
 
     /** "S4 · E105 · The Battlefront of Alabasta!  ·  10 min left", from whatever the app shared. */
@@ -846,8 +885,7 @@ public class HomeActivity extends Activity {
     private void fillContinue(List<Apps.Continue> all) {
         lastContinue = all;
         fillHero();
-        List<Apps.Continue> items = new ArrayList<>(all);
-        items.remove(heroWatch); // it's on the billboard already
+        List<Apps.Continue> items = all; // all of them: the billboard previews whichever card has focus
         continueRow.removeAllViews();
         if (items.isEmpty()) {
             TextView t = Ui.text(this, "Shows you start in YouTube, Prime Video and other apps will appear here.", 10, Ui.MUTED, Ui.BODY);
@@ -908,6 +946,11 @@ public class HomeActivity extends Activity {
         card.setContentDescription(w.title);
         Ui.focusLift(card, radius, 1.06f);
         card.setOnClickListener(v -> resume(w));
+        View.OnFocusChangeListener lift = card.getOnFocusChangeListener();
+        card.setOnFocusChangeListener((v, has) -> {
+            lift.onFocusChange(v, has);
+            if (has) previewSoon(w);
+        });
         return card;
     }
 
