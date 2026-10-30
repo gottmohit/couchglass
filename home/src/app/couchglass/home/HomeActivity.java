@@ -610,7 +610,7 @@ public class HomeActivity extends Activity {
         heroWatch = null;
         if (Apps.gamepadsConnected() == 0 || featured == null) {
             for (Apps.Continue w : lastContinue) {
-                if (w.intent != null && w.posterUri != null) {
+                if (w.intent != null && (w.posterUri != null || w.fallbackArt != null)) {
                     heroWatch = w;
                     break;
                 }
@@ -628,7 +628,7 @@ public class HomeActivity extends Activity {
             cleanPlayBtn.setText("Clean memory, then watch");
             cleanPlayBtn.setVisibility(View.VISIBLE);
             heroArt.setImageDrawable(w.fallbackArt);
-            bg.execute(() -> {
+            if (w.posterUri != null) bg.execute(() -> {
                 Bitmap b = repo.loadPoster(w.posterUri, dp(300));
                 if (b != null) ui.post(() -> {
                     if (heroWatch == w) heroArt.setImageBitmap(b);
@@ -683,6 +683,14 @@ public class HomeActivity extends Activity {
     }
 
     private void resume(Apps.Continue w) {
+        if (w.session != null) {
+            try {
+                w.session.send();
+                return;
+            } catch (Exception ignored) {
+                // The app closed its player: open the app instead.
+            }
+        }
         Intent i = w.intent;
         if (i == null) {
             Apps.App a = repo.find(apps, w.pkg);

@@ -147,8 +147,13 @@ public class GlassDream extends DreamService {
             if (pick != null && pick.intent != null) {
                 if (up) {
                     try {
-                        startActivity(new Intent(pick.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                    } catch (Exception ignored) {
+                        if (pick.session != null) pick.session.send();
+                        else startActivity(new Intent(pick.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception gone) { // the app closed its player: open the app instead
+                        try {
+                            startActivity(new Intent(pick.intent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception ignored) {
+                        }
                     }
                     wakeUp();
                 }
@@ -184,6 +189,7 @@ public class GlassDream extends DreamService {
                     k.meta = w.meta == null ? "" : w.meta;
                     k.progressPct = w.progressPct;
                     k.intent = w.intent;
+                    k.session = w.session;
                     k.poster = b;
                     // A soft blur without RenderScript: shrink to a few pixels, then grow back in one smooth step.
                     Bitmap tiny = Bitmap.createScaledBitmap(b, 12, Math.max(1, 12 * b.getHeight() / b.getWidth()), true);

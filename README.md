@@ -22,6 +22,9 @@ It is two small apps that work together:
 - Continue watching from Android TV's Watch Next list, with posters, episode and time left.
 - Your apps as their own TV banners; hold OK on one to move or hide it.
 - An "Up next" billboard: the show you were last watching, with its artwork, episode and time left.
+  It follows whatever you watched last, in any app: Watch Next, plus the "now playing" details apps
+  publish (for apps such as Netflix that don't share Watch Next), with the most recently used video
+  app as a last resort.
   Resume is already selected when Home opens, so one press of OK takes you back into it. Connect a
   game controller and the billboard turns into Game night for your favourite game.
 - Live TV tab with the channels your TV's inputs publish.
@@ -77,6 +80,8 @@ adb install out/couchglass-home.apk
 # Continue watching and recent apps
 adb shell pm grant app.couchglass.home android.permission.READ_TV_LISTINGS
 adb shell appops set app.couchglass.home GET_USAGE_STATS allow
+# What's playing in apps that don't share Watch Next (Netflix, for one). Reads media sessions only.
+adb shell cmd notification allow_listener app.couchglass.home/app.couchglass.home.NowPlaying
 ```
 
 Open **Couchglass Care** once on the TV and choose **Always allow** on the debugging prompt.

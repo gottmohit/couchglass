@@ -45,6 +45,8 @@ public class Apps {
         public Intent intent;
         public String posterUri;
         public Drawable fallbackArt;
+        public long when; // last watched (ms); 0 = unknown
+        public android.app.PendingIntent session; // the app's own way back to its player, when known
     }
 
     /** Your usual order; anything else follows alphabetically. */
@@ -169,7 +171,8 @@ public class Apps {
                 TvContract.WatchNextPrograms.COLUMN_DURATION_MILLIS,
                 TvContract.WatchNextPrograms.COLUMN_INTENT_URI,
                 TvContract.WatchNextPrograms.COLUMN_POSTER_ART_URI,
-                TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_URI
+                TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_URI,
+                TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS
         };
         try (Cursor c = context.getContentResolver().query(TvContract.WatchNextPrograms.CONTENT_URI, cols, null, null,
                 TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS + " DESC")) {
@@ -193,6 +196,7 @@ public class Apps {
                 } catch (Exception ignored) {
                 }
                 w.posterUri = c.getString(8) != null ? c.getString(8) : c.getString(9);
+                w.when = c.getLong(10);
                 App a = find(apps, w.pkg);
                 if (a != null) w.fallbackArt = a.banner;
                 if (!w.title.isEmpty()) out.add(w);
@@ -200,6 +204,7 @@ public class Apps {
         } catch (Exception ignored) {
             // No permission or no TV provider: use recent apps below.
         }
+        mergeNowPlaying(out, apps);
         if (!out.isEmpty()) return out;
 
         Map<String, Long> last = lastUsed(14);
@@ -217,6 +222,66 @@ public class Apps {
             out.add(w);
         }
         return out;
+    }
+
+    /**
+     * Adds what was last playing in apps that don't share Watch Next (Netflix, for one), then puts
+     * everything in the order you watched it, so the most recent show leads.
+     */
+    private void mergeNowPlaying(List<Continue> out, List<App> apps) {
+        for (NowPlaying.Played p : NowPlaying.recent(context)) {
+            Continue same = null;
+            for (Continue w : out) if (w.pkg.equals(p.pkg)) same = w;
+            if (same != null && same.when >= p.when) continue; // the app's own Watch Next entry is newer
+            if (same != null && same.title.equalsIgnoreCase(p.title)) {
+                same.when = p.when; // the same show: keep its richer Watch Next card, now dated
+                continue;
+            }
+            Continue w = new Continue();
+            w.pkg = p.pkg;
+            w.title = p.title;
+            w.meta = p.subtitle == null ? "" : p.subtitle;
+            w.progressPct = -1;
+            w.posterUri = p.art;
+            w.when = p.when;
+            w.session = NowPlaying.RESUME.get(p.pkg);
+            App a = find(apps, p.pkg);
+            if (a != null) {
+                w.fallbackArt = a.banner;
+                w.intent = launchIntent(a);
+            } else {
+                w.intent = pm.getLeanbackLaunchIntentForPackage(p.pkg);
+                if (w.intent == null) w.intent = pm.getLaunchIntentForPackage(p.pkg);
+            }
+            if (w.intent != null) out.add(w);
+        }
+        Collections.sort(out, (x, y) -> Long.compare(y.when, x.when));
+
+        // Safety net: a video app used since the newest show above, that told us nothing about what
+        // it played, still leads. Better "Continue on Netflix" than an older show from another app.
+        Map<String, Long> last = lastUsed(2);
+        long newest = out.isEmpty() ? 0 : out.get(0).when;
+        App lead = null;
+        for (App a : apps) {
+            if (a.game || NowPlaying.isAudio(a.pkg) || LIVE_TV_PKG.equals(a.pkg)) continue;
+            long t = get(last, a.pkg);
+            if (t > newest + 60_000 && (lead == null || t > get(last, lead.pkg))) lead = a;
+        }
+        if (lead != null) {
+            boolean known = false;
+            for (Continue w : out) known |= w.pkg.equals(lead.pkg);
+            if (!known) {
+                Continue w = new Continue();
+                w.pkg = lead.pkg;
+                w.title = "Continue on " + lead.label;
+                w.meta = "Opened " + ago(get(last, lead.pkg));
+                w.progressPct = -1;
+                w.fallbackArt = lead.banner;
+                w.intent = launchIntent(lead);
+                w.when = get(last, lead.pkg);
+                out.add(0, w);
+            }
+        }
     }
 
     private Map<String, Long> lastUsed(int days) {
@@ -240,7 +305,11 @@ public class Apps {
         try {
             Uri u = Uri.parse(uri);
             byte[] data;
-            if (ContentResolver.SCHEME_CONTENT.equals(u.getScheme()) || ContentResolver.SCHEME_ANDROID_RESOURCE.equals(u.getScheme())) {
+            if (ContentResolver.SCHEME_FILE.equals(u.getScheme())) {
+                try (InputStream in = new java.io.FileInputStream(u.getPath())) {
+                    data = readAll(in);
+                }
+            } else if (ContentResolver.SCHEME_CONTENT.equals(u.getScheme()) || ContentResolver.SCHEME_ANDROID_RESOURCE.equals(u.getScheme())) {
                 try (InputStream in = context.getContentResolver().openInputStream(u)) {
                     data = readAll(in);
                 }
