@@ -624,10 +624,12 @@ public class HomeActivity extends Activity {
             heroTitle.setText(w.title);
             heroSub.setText(w.meta == null || w.meta.isEmpty() ? "Pick up where you left off" : w.meta);
             if (w.progressPct > 0) heroBar.addView(new ProgressBarView(this, w.progressPct), new FrameLayout.LayoutParams(-1, -1));
-            playBtn.setText("▶  Resume");
-            cleanPlayBtn.setText("Clean memory, then watch");
+            boolean show = w.posterUri != null || w.session != null; // we know the show, not just the app
+            playBtn.setText(show ? "▶  Resume" : "▶  Open " + (a == null ? "app" : a.label));
+            cleanPlayBtn.setText(show ? "Clean memory, then watch" : "Clean memory, then open");
             cleanPlayBtn.setVisibility(View.VISIBLE);
-            heroArt.setImageDrawable(w.fallbackArt);
+            // No poster: no logo either, just a soft glow in the app's own colour.
+            heroArt.setImageDrawable(w.posterUri != null ? null : brandGlow(w.fallbackArt));
             if (w.posterUri != null) bg.execute(() -> {
                 Bitmap b = repo.loadPoster(w.posterUri, dp(300));
                 if (b != null) ui.post(() -> {
@@ -658,6 +660,37 @@ public class HomeActivity extends Activity {
         String pads2 = pads == 0 ? "Connect a controller to play" : pads == 1 ? "1 controller connected" : pads + " controllers connected";
         String extra = featured != null && Apps.FEATURED_GAME.equals(featured.pkg) ? "Split screen · " : "";
         heroSub.setText(extra + pads2);
+    }
+
+    /** A radial glow in the most vivid colour of an app's banner (Netflix red, Prime blue). */
+    private android.graphics.drawable.Drawable brandGlow(android.graphics.drawable.Drawable banner) {
+        int color = Ui.ACCENT;
+        if (banner != null) {
+            Bitmap b = Bitmap.createBitmap(48, 27, Bitmap.Config.ARGB_8888);
+            banner.setBounds(0, 0, 48, 27);
+            banner.draw(new android.graphics.Canvas(b));
+            float best = 0;
+            float[] hsv = new float[3];
+            for (int y = 0; y < 27; y++) {
+                for (int x = 0; x < 48; x++) {
+                    int p = b.getPixel(x, y);
+                    if ((p >>> 24) < 200) continue;
+                    android.graphics.Color.colorToHSV(p, hsv);
+                    float score = hsv[1] * hsv[2];
+                    if (score > best) {
+                        best = score;
+                        color = p | 0xFF000000;
+                    }
+                }
+            }
+            b.recycle();
+        }
+        GradientDrawable g = new GradientDrawable();
+        g.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        g.setGradientRadius(dp(170));
+        g.setGradientCenter(0.62f, 0.5f);
+        g.setColors(new int[]{(color & 0xFFFFFF) | 0x8C000000, (color & 0xFFFFFF) | 0x26000000, color & 0xFFFFFF});
+        return g;
     }
 
     private void heroPrimary() {
