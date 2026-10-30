@@ -159,6 +159,69 @@ public final class Ui {
         return orbs;
     }
 
+    /** Glows in other colours (the show on the billboard); null goes back to the theme's own. */
+    public static void tint(int[] colors) {
+        String keep = current;
+        if (colors == null || colors.length < 3) {
+            apply(keep);
+            return;
+        }
+        orbs = colors;
+        if (DARK) orbAlpha = Math.max(orbAlpha, 0.56f); // a show's colours should read on dark themes
+    }
+
+    /**
+     * Three glow colours from a picture: its most vivid hues, at least a little apart, brightened
+     * to suit the theme. Returns null for pictures without colour (black and white, near-black).
+     */
+    public static int[] palette(Bitmap src) {
+        if (src == null) return null;
+        Bitmap b = Bitmap.createScaledBitmap(src, 40, Math.max(1, 40 * src.getHeight() / src.getWidth()), true);
+        float[] weight = new float[12], hsv = new float[3];
+        float[][] sum = new float[12][3];
+        for (int y = 0; y < b.getHeight(); y++) {
+            for (int x = 0; x < b.getWidth(); x++) {
+                int p = b.getPixel(x, y);
+                android.graphics.Color.colorToHSV(p, hsv);
+                if (hsv[1] < 0.22f || hsv[2] < 0.2f) continue; // greys and shadows say nothing
+                int k = Math.min(11, (int) (hsv[0] / 30f));
+                float w = hsv[1] * hsv[2];
+                weight[k] += w;
+                sum[k][0] += ((p >> 16) & 255) * w;
+                sum[k][1] += ((p >> 8) & 255) * w;
+                sum[k][2] += (p & 255) * w;
+            }
+        }
+        if (b != src) b.recycle();
+        int[] pick = new int[3];
+        int n = 0;
+        boolean[] used = new boolean[12];
+        while (n < 3) {
+            int best = -1;
+            for (int k = 0; k < 12; k++) {
+                if (used[k] || weight[k] <= 0) continue;
+                boolean near = false; // keep the three hues apart
+                for (int j = 0; j < n; j++) near |= Math.min(Math.abs(k - pick[j]), 12 - Math.abs(k - pick[j])) < 2;
+                if (!near && (best < 0 || weight[k] > weight[best])) best = k;
+            }
+            if (best < 0) break;
+            used[best] = true;
+            pick[n++] = best;
+        }
+        if (n == 0) return null;
+        int[] out = new int[3];
+        for (int i = 0; i < 3; i++) {
+            int k = pick[Math.min(i, n - 1)];
+            int c = 0xFF000000 | (Math.round(sum[k][0] / weight[k]) << 16) | (Math.round(sum[k][1] / weight[k]) << 8) | Math.round(sum[k][2] / weight[k]);
+            android.graphics.Color.colorToHSV(c, hsv);
+            if (i >= n) hsv[0] = (hsv[0] + 25 * i) % 360; // fewer than three hues: neighbours of the main one
+            hsv[1] = Math.max(hsv[1], DARK ? 0.6f : 0.5f);
+            hsv[2] = DARK ? 0.88f : 0.96f;
+            out[i] = android.graphics.Color.HSVToColor(hsv);
+        }
+        return out;
+    }
+
     public static float orbAlpha() {
         return orbAlpha;
     }

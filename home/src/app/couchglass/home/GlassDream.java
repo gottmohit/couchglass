@@ -63,6 +63,15 @@ public class GlassDream extends DreamService {
         prefs = getSharedPreferences("home", MODE_PRIVATE);
         weather = new Weather(this).cached();
         Ui.apply(Ui.resolve(prefs.getString("theme", "Auto"), weather == null ? 0 : weather.sunrise, weather == null ? 0 : weather.sunset));
+        // Ambient colour: glow in the colours of the show you were watching, as the home screen does.
+        String amb = prefs.getString("ambient", "");
+        if (!amb.isEmpty() && System.currentTimeMillis() - prefs.getLong("ambient_at", 0) < 12 * 3_600_000L) {
+            try {
+                String[] p = amb.split(",");
+                Ui.tint(new int[]{Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2])});
+            } catch (Exception ignored) {
+            }
+        }
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(0xFF000000);
@@ -182,7 +191,7 @@ public class GlassDream extends DreamService {
                 for (Apps.Continue w : all) {
                     if (out.size() >= 4) break;
                     if (w.posterUri == null) continue;
-                    Bitmap b = repo.loadPoster(w.posterUri, dp(440));
+                    Bitmap b = HomeActivity.trimBars(repo.loadPoster(w.posterUri, dp(440)));
                     if (b == null) continue;
                     Scenes.Pick k = new Scenes.Pick();
                     k.title = w.title;

@@ -644,8 +644,11 @@ public class HomeActivity extends Activity {
                 if (b != null) ui.post(() -> {
                     if (heroWatch == w) heroArt.setImageBitmap(b);
                 });
+                ambient(b == null ? null : Ui.palette(b), w.posterUri);
             });
+            else ambient(null, null);
         } else if (featured == null) {
+            ambient(null, null);
             heroLeft.setText("");
             heroKicker.setText("GAME NIGHT");
             heroTitle.setText("No games yet");
@@ -654,6 +657,7 @@ public class HomeActivity extends Activity {
             cleanPlayBtn.setVisibility(View.GONE);
             updateHeroSub();
         } else {
+            ambient(null, null);
             heroLeft.setText("");
             heroKicker.setText("GAME NIGHT");
             heroTitle.setText(Apps.FEATURED_GAME.equals(featured.pkg) ? "Beach Buggy Racing" : featured.label);
@@ -673,8 +677,47 @@ public class HomeActivity extends Activity {
         heroSub.setText(extra + pads2);
     }
 
+    private String ambientKey = "";
+
+    /**
+     * Ambient colour: the home screen's glows take the colours of the show on the billboard and
+     * cross-fade to them; null colours go back to the theme. The screensaver reads the same colours.
+     * Safe to call from any thread.
+     */
+    private void ambient(int[] colors, String key) {
+        String k = colors == null ? "" : key;
+        if (k.equals(ambientKey)) return;
+        ambientKey = k;
+        prefs.edit().putString("ambient", colors == null ? "" : colors[0] + "," + colors[1] + "," + colors[2])
+                .putLong("ambient_at", System.currentTimeMillis()).apply();
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        bg.execute(() -> {
+            Bitmap wall;
+            synchronized (Ui.class) {
+                Ui.tint(colors);
+                wall = Ui.wallpaper(dm.widthPixels, dm.heightPixels);
+            }
+            ui.post(() -> {
+                android.graphics.drawable.Drawable was = root.getBackground();
+                BitmapDrawable now = new BitmapDrawable(getResources(), wall);
+                if (was == null) {
+                    root.setBackground(now);
+                    return;
+                }
+                android.graphics.drawable.TransitionDrawable fade =
+                        new android.graphics.drawable.TransitionDrawable(new android.graphics.drawable.Drawable[]{was, now});
+                fade.setCrossFadeEnabled(true);
+                root.setBackground(fade);
+                fade.startTransition(1200);
+                ui.postDelayed(() -> {
+                    if (root.getBackground() == fade) root.setBackground(now); // let the old picture go
+                }, 1400);
+            });
+        });
+    }
+
     /** Crops black bars that some apps bake into their artwork, so the picture fills the billboard. */
-    private static Bitmap trimBars(Bitmap b) {
+    static Bitmap trimBars(Bitmap b) {
         if (b == null) return null;
         int w = b.getWidth(), h = b.getHeight(), left = 0, right = w - 1;
         while (left < w / 3 && darkColumn(b, left, h)) left++;
