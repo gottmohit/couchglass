@@ -123,6 +123,73 @@ public class Apps {
         return i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     }
 
+    /** A row an app publishes to the TV's home screen: "Most Popular" from Crunchyroll, and so on. */
+    public static class Shelf {
+        public String title, app, pkg;
+        public List<Continue> items = new ArrayList<>();
+    }
+
+    /** Apps whose rows aren't recommendations: app ads, the disabled PatchWall, music. */
+    private static final Set<String> NO_SHELVES = new HashSet<>(java.util.Arrays.asList(
+            "com.google.android.tvrecommendations", "com.mitv.tvhome.atv", "com.mitv.tvhome.mitvplus",
+            "com.spotify.tv.android", "app.couchglass.home"));
+
+    /**
+     * The rows your apps publish for the home screen (what Google TV shows below its own rows),
+     * from apps that are installed, newest channels first, up to perRow programmes each.
+     */
+    public List<Shelf> shelves(List<App> apps, int maxRows, int perRow) {
+        List<Shelf> out = new ArrayList<>();
+        // The TV's provider rejects filters from apps like us, so read everything and filter here.
+        String[] chCols = {TvContract.Channels._ID, TvContract.Channels.COLUMN_PACKAGE_NAME, TvContract.Channels.COLUMN_DISPLAY_NAME,
+                TvContract.Channels.COLUMN_BROWSABLE, TvContract.Channels.COLUMN_TYPE};
+        try (Cursor ch = context.getContentResolver().query(TvContract.Channels.CONTENT_URI, chCols, null, null, null)) {
+            while (ch != null && ch.moveToNext() && out.size() < maxRows) {
+                if (ch.getInt(3) != 1 || !TvContract.Channels.TYPE_PREVIEW.equals(ch.getString(4))) continue;
+                String pkg = ch.getString(1);
+                App a = find(apps, pkg);
+                if (a == null || NO_SHELVES.contains(pkg)) continue;
+                Shelf sh = new Shelf();
+                sh.pkg = pkg;
+                sh.app = a.label;
+                sh.title = nz(ch.getString(2));
+                fillShelf(sh, ch.getLong(0), a, perRow);
+                if (sh.items.size() >= 3) out.add(sh);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("Couchglass", "app rows unavailable: " + e); // the TV doesn't share channels with us
+        }
+        return out;
+    }
+
+    private void fillShelf(Shelf sh, long channelId, App a, int perRow) {
+        String[] cols = {TvContract.PreviewPrograms.COLUMN_TITLE, TvContract.PreviewPrograms.COLUMN_EPISODE_TITLE,
+                TvContract.PreviewPrograms.COLUMN_POSTER_ART_URI, TvContract.PreviewPrograms.COLUMN_THUMBNAIL_URI,
+                TvContract.PreviewPrograms.COLUMN_INTENT_URI, TvContract.PreviewPrograms.COLUMN_SHORT_DESCRIPTION,
+                TvContract.PreviewPrograms.COLUMN_BROWSABLE};
+        try (Cursor c = context.getContentResolver().query(TvContract.buildPreviewProgramsUriForChannel(channelId), cols, null, null, null)) {
+            while (c != null && c.moveToNext() && sh.items.size() < perRow) {
+                if (c.getInt(6) != 1) continue;
+                Continue w = new Continue();
+                w.pkg = sh.pkg;
+                w.title = nz(c.getString(0));
+                if (w.title.isEmpty()) continue;
+                String ep = nz(c.getString(1));
+                w.meta = ep.isEmpty() || ep.equals(w.title) ? "" : ep;
+                w.posterUri = c.getString(2) != null ? c.getString(2) : c.getString(3);
+                if (w.posterUri == null) continue; // a recommendation without a picture isn't worth the space
+                try {
+                    if (c.getString(4) != null) w.intent = Intent.parseUri(c.getString(4), Intent.URI_INTENT_SCHEME);
+                } catch (Exception ignored) {
+                }
+                if (w.intent == null) w.intent = launchIntent(a);
+                w.progressPct = -1;
+                w.fallbackArt = a.banner;
+                sh.items.add(w);
+            }
+        }
+    }
+
     /**
      * How to resume a show. A link straight into an episode is opened on top of the app's normal
      * start, and isn't kept once the player is up: some apps (Crunchyroll) re-read the link whenever

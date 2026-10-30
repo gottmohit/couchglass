@@ -73,7 +73,9 @@ public class HomeActivity extends Activity {
     private List<Apps.Continue> lastContinue = new ArrayList<>();
     private Runnable afterClean;
     private RingView ring;
-    private LinearLayout continueRow, appsRow, inputMenu, tabsBar;
+    private LinearLayout continueRow, appsRow, inputMenu, tabsBar, shelvesBox;
+    private ScrollView homeScroll;
+    private long shelvesAt;
     private View inputBtn, castBtn, wifiBtn, settingsBtn, searchBtn;
     private final View[] controlBtns = new View[4];
     private View homeContent, gridPanel;
@@ -144,7 +146,9 @@ public class HomeActivity extends Activity {
         loadContinue();
         updateHeroSub();
         showTab("Home");
+        homeScroll.scrollTo(0, 0);
         playBtn.requestFocus();
+        loadShelves();
         showWeather(weather.cached());
         if (weather.stale()) refreshWeather();
         if (prefs.getBoolean("reopen_settings", false)) {
@@ -228,26 +232,51 @@ public class HomeActivity extends Activity {
 
         page.addView(header(), new LinearLayout.LayoutParams(-1, dp(44)));
 
+        // The body clips (so scrolled rows pass under the clock and tabs), but reaches 24dp past the
+        // page margins, so focused cards and shadows at the edges have room.
         FrameLayout body = new FrameLayout(this);
-        body.setClipChildren(false);
+        body.setClipChildren(true);
         body.setClipToPadding(false);
-        page.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
+        LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        bodyLp.leftMargin = -dp(24);
+        bodyLp.rightMargin = -dp(24);
+        page.addView(body, bodyLp);
 
+        // Home scrolls: the rows your apps publish ("From your apps") sit below Your apps.
         LinearLayout home = column();
-        homeContent = home;
-        body.addView(home, new FrameLayout.LayoutParams(-1, -1));
-        home.addView(heroRow(), lp(-1, dp(150), 16));
+        homeScroll = new ScrollView(this);
+        homeScroll.setVerticalScrollBarEnabled(false);
+        homeScroll.setClipChildren(false);
+        homeScroll.setClipToPadding(false);
+        homeScroll.setPadding(dp(24), dp(10), dp(24), 0); // inside the body's extra 24dp; room for shadows
+        homeScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        homeScroll.setSmoothScrollingEnabled(true);
+        homeScroll.addView(home, new FrameLayout.LayoutParams(-1, -2));
+        homeContent = homeScroll;
+        body.addView(homeScroll, new FrameLayout.LayoutParams(-1, -1));
+        View hero = heroRow();
+        home.addView(hero, lp(-1, dp(150), 6));
+        // Anything on the billboard row (or the header) shows the page from the very top.
+        root.getViewTreeObserver().addOnGlobalFocusChangeListener((was, now) -> {
+            if (now != null && homeScroll.getScrollY() > 0 && (isInside(now, hero) || !isInside(now, homeScroll))) {
+                homeScroll.smoothScrollTo(0, 0);
+            }
+        });
         home.addView(sectionTitle("Continue watching", "From apps that share what you were watching"), lp(-1, dp(20), 20));
         continueRow = row();
         home.addView(scroller(continueRow), lp(-1, dp(107 + 24), 0));
         home.addView(sectionTitle("Your apps", null), lp(-1, dp(20), 4));
         appsRow = row();
         home.addView(scroller(appsRow), lp(-1, dp(50 + 24), 0));
+        shelvesBox = column();
+        home.addView(shelvesBox, lp(-1, -2, 0));
 
         gridPanel = gridPanel();
         gridPanel.setVisibility(View.GONE);
         FrameLayout.LayoutParams gp = new FrameLayout.LayoutParams(-1, -1);
         gp.topMargin = dp(16);
+        gp.leftMargin = dp(24); // the body reaches 24dp past the page margins
+        gp.rightMargin = dp(24);
         body.addView(gridPanel, gp);
 
         inputMenu = inputMenu();
@@ -495,6 +524,7 @@ public class HomeActivity extends Activity {
                 fillHero();
                 if (!"Home".equals(tab)) fillGrid();
                 loadContinue();
+                loadShelves();
             });
         });
     }
@@ -715,6 +745,39 @@ public class HomeActivity extends Activity {
         return true;
     }
 
+    // ---------------------------------------------------------------- From your apps
+
+    /** Loads the apps' rows; at most every 20 minutes, as each row brings a dozen posters. */
+    private void loadShelves() {
+        if (apps.isEmpty()) return; // loadApps calls again once the apps are known
+        if (System.currentTimeMillis() - shelvesAt < 20 * 60_000L && shelvesBox.getChildCount() > 0) return;
+        shelvesAt = System.currentTimeMillis();
+        List<Apps.App> snapshot = apps;
+        bg.execute(() -> {
+            List<Apps.Shelf> list = repo.shelves(snapshot, 5, 10);
+            ui.post(() -> fillShelves(list));
+        });
+    }
+
+    private void fillShelves(List<Apps.Shelf> list) {
+        shelvesBox.removeAllViews();
+        for (Apps.Shelf sh : list) {
+            shelvesBox.addView(sectionTitle(sh.title, "From " + sh.app), lp(-1, dp(20), 6));
+            LinearLayout r = row();
+            for (int i = 0; i < sh.items.size(); i++) {
+                View card = continueCard(sh.items.get(i), false);
+                if (i == 0) card.setNextFocusLeftId(id(card));
+                if (i == sh.items.size() - 1) card.setNextFocusRightId(id(card));
+                r.addView(card, tileLp(dp(150), dp(84), i == 0 ? 0 : dp(12)));
+            }
+            shelvesBox.addView(scroller(r), lp(-1, dp(84 + 24), 0));
+        }
+        if (!list.isEmpty()) {
+            View pad = new View(this); // room to scroll the last row clear of the screen edge
+            shelvesBox.addView(pad, lp(-1, dp(24), 0));
+        }
+    }
+
     /** Posters already shown on the billboard, so browsing back and forth doesn't fetch them again. */
     private final android.util.LruCache<String, Bitmap> posters = new android.util.LruCache<>(8);
 
@@ -908,6 +971,10 @@ public class HomeActivity extends Activity {
     }
 
     private View continueCard(Apps.Continue w) {
+        return continueCard(w, true);
+    }
+
+    private View continueCard(Apps.Continue w, boolean preview) {
         int radius = dp(13);
         FrameLayout card = new FrameLayout(this);
         card.setBackground(new Soft(Soft.Kind.NEU_UP, radius, dp(5), Ui.TILE));
@@ -949,7 +1016,7 @@ public class HomeActivity extends Activity {
         View.OnFocusChangeListener lift = card.getOnFocusChangeListener();
         card.setOnFocusChangeListener((v, has) -> {
             lift.onFocusChange(v, has);
-            if (has) previewSoon(w);
+            if (has && preview) previewSoon(w);
         });
         return card;
     }
@@ -1345,6 +1412,11 @@ public class HomeActivity extends Activity {
     }
 
     // ---------------------------------------------------------------- small builders
+
+    private static boolean isInside(View v, View ancestor) {
+        for (android.view.ViewParent p = v.getParent(); p != null; p = p.getParent()) if (p == ancestor) return true;
+        return v == ancestor;
+    }
 
     private LinearLayout row() {
         LinearLayout l = new LinearLayout(this);

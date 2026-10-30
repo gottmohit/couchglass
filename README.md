@@ -21,6 +21,9 @@ It is two small apps that work together:
   or Auto (Mist by day, Dusk after sunset).
 - Continue watching from Android TV's Watch Next list, with posters, episode and time left.
 - Your apps as their own TV banners; hold OK on one to move or hide it.
+- From your apps: below Your apps, the rows your apps publish for the home screen (Prime Video,
+  Netflix, Crunchyroll's Most Popular, JioHotstar's Top Picks…), with their posters; OK plays.
+  The same rows Google TV shows, read from Android TV's channel list.
 - An "Up next" billboard: the show you were last watching, with its artwork, episode and time left.
   It follows whatever you watched last, in any app: Watch Next, plus the "now playing" details apps
   publish (for apps such as Netflix that don't share Watch Next), with the most recently used video
