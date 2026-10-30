@@ -258,16 +258,28 @@ public class HomeActivity extends Activity {
         home.addView(hero, lp(-1, dp(150), 6));
         // Anything on the billboard row (or the header) shows the page from the very top.
         root.getViewTreeObserver().addOnGlobalFocusChangeListener((was, now) -> {
-            if (now != null && homeScroll.getScrollY() > 0 && (isInside(now, hero) || !isInside(now, homeScroll))) {
-                homeScroll.smoothScrollTo(0, 0);
+            if (now == null || !isInside(now, homeScroll) || isInside(now, hero)) {
+                if (homeScroll.getScrollY() > 0) homeScroll.smoothScrollTo(0, 0);
+                return;
+            }
+            // Moving up into a row: bring its title into view too, not just the cards.
+            for (android.view.ViewParent p = now.getParent(); p instanceof View; p = p.getParent()) {
+                Object t = ((View) p).getTag(R_TITLE);
+                if (t instanceof View) {
+                    int top = topIn((View) t, home) - dp(6);
+                    if (top < homeScroll.getScrollY()) homeScroll.smoothScrollTo(0, Math.max(0, top));
+                    break;
+                }
             }
         });
-        home.addView(sectionTitle("Continue watching", "From apps that share what you were watching"), lp(-1, dp(20), 20));
+        View continueTitle = sectionTitle("Continue watching", "From apps that share what you were watching");
+        home.addView(continueTitle, lp(-1, dp(20), 20));
         continueRow = row();
-        home.addView(scroller(continueRow), lp(-1, dp(107 + 24), 0));
-        home.addView(sectionTitle("Your apps", null), lp(-1, dp(20), 4));
+        home.addView(titled(scroller(continueRow), continueTitle), lp(-1, dp(107 + 24), 0));
+        View appsTitle = sectionTitle("Your apps", null);
+        home.addView(appsTitle, lp(-1, dp(20), 4));
         appsRow = row();
-        home.addView(scroller(appsRow), lp(-1, dp(50 + 24), 0));
+        home.addView(titled(scroller(appsRow), appsTitle), lp(-1, dp(50 + 24), 0));
         shelvesBox = column();
         home.addView(shelvesBox, lp(-1, -2, 0));
 
@@ -762,7 +774,8 @@ public class HomeActivity extends Activity {
     private void fillShelves(List<Apps.Shelf> list) {
         shelvesBox.removeAllViews();
         for (Apps.Shelf sh : list) {
-            shelvesBox.addView(sectionTitle(sh.title, "From " + sh.app), lp(-1, dp(20), 6));
+            View title = sectionTitle(sh.title, "From " + sh.app);
+            shelvesBox.addView(title, lp(-1, dp(20), 6));
             LinearLayout r = row();
             for (int i = 0; i < sh.items.size(); i++) {
                 View card = continueCard(sh.items.get(i), false);
@@ -770,7 +783,7 @@ public class HomeActivity extends Activity {
                 if (i == sh.items.size() - 1) card.setNextFocusRightId(id(card));
                 r.addView(card, tileLp(dp(150), dp(84), i == 0 ? 0 : dp(12)));
             }
-            shelvesBox.addView(scroller(r), lp(-1, dp(84 + 24), 0));
+            shelvesBox.addView(titled(scroller(r), title), lp(-1, dp(84 + 24), 0));
         }
         if (!list.isEmpty()) {
             View pad = new View(this); // room to scroll the last row clear of the screen edge
@@ -1412,6 +1425,20 @@ public class HomeActivity extends Activity {
     }
 
     // ---------------------------------------------------------------- small builders
+
+    private static final int R_TITLE = 0x7f0f0001; // view tag key: a row's title
+
+    private static View titled(View row, View title) {
+        row.setTag(R_TITLE, title);
+        return row;
+    }
+
+    /** A view's top edge measured in an ancestor's coordinates. */
+    private static int topIn(View v, View ancestor) {
+        int y = 0;
+        for (View x = v; x != null && x != ancestor; x = x.getParent() instanceof View ? (View) x.getParent() : null) y += x.getTop();
+        return y;
+    }
 
     private static boolean isInside(View v, View ancestor) {
         for (android.view.ViewParent p = v.getParent(); p != null; p = p.getParent()) if (p == ancestor) return true;
