@@ -46,6 +46,7 @@ public class Apps {
         public String posterUri;
         public Drawable fallbackArt;
         public long when; // last watched (ms); 0 = unknown
+        public String episode, seasonEpisode, left; // "The Battlefront of Alabasta!", "S4 · E105", "10 min left"
         public android.app.PendingIntent session; // the app's own way back to its player, when known
     }
 
@@ -189,6 +190,12 @@ public class Apps {
                 if (dur > 0 && pos > 0) meta.append(minutes(dur - pos)).append(" left");
                 else if (!ep.isEmpty() && !ep.equals(w.title)) meta.append(ep);
                 w.meta = meta.toString().replaceAll(" · $", "");
+                StringBuilder sxe = new StringBuilder();
+                if (c.getString(3) != null) sxe.append('S').append(c.getString(3)).append(" · ");
+                if (c.getString(4) != null) sxe.append('E').append(c.getString(4));
+                w.seasonEpisode = sxe.toString().replaceAll(" · $", "");
+                if (!ep.isEmpty() && !ep.equals(w.title)) w.episode = ep;
+                if (dur > 0 && pos > 0) w.left = minutes(dur - pos) + " left";
                 w.progressPct = dur > 0 ? (int) Math.min(100, pos * 100 / dur) : -1;
                 try {
                     String uri = c.getString(7);
@@ -230,11 +237,15 @@ public class Apps {
      */
     private void mergeNowPlaying(List<Continue> out, List<App> apps) {
         for (NowPlaying.Played p : NowPlaying.recent(context)) {
-            Continue same = null;
-            for (Continue w : out) if (w.pkg.equals(p.pkg)) same = w;
+            Continue same = null; // the app's most recent Watch Next card
+            for (Continue w : out) if (w.pkg.equals(p.pkg) && (same == null || w.when > same.when)) same = w;
             if (same != null && same.when >= p.when) continue; // the app's own Watch Next entry is newer
-            if (same != null && same.title.equalsIgnoreCase(p.title)) {
-                same.when = p.when; // the same show: keep its richer Watch Next card, now dated
+            // Same app, watched within a day of its Watch Next card: the same show. Apps often publish
+            // the episode name while playing ("The Battlefront of Alabasta!") and the show, poster and
+            // progress to Watch Next ("One Piece", S4 · E105): keep the rich card and add the episode.
+            if (same != null && (same.title.equalsIgnoreCase(p.title) || p.when - same.when < 86_400_000L)) {
+                same.when = p.when;
+                if (!same.title.equalsIgnoreCase(p.title) && same.episode == null) same.episode = p.title;
                 continue;
             }
             Continue w = new Continue();

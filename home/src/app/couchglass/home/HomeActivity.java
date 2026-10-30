@@ -68,6 +68,7 @@ public class HomeActivity extends Activity {
     private ImageView heroArt;
     private TextView heroKicker;
     private FrameLayout heroBar;
+    private TextView heroLeft;
     private Apps.Continue heroWatch; // the show the hero offers to resume; null = Game night
     private List<Apps.Continue> lastContinue = new ArrayList<>();
     private Runnable afterClean;
@@ -355,9 +356,16 @@ public class HomeActivity extends Activity {
         text.addView(heroTitle, lp(-2, -2, 5));
         heroSub = Ui.text(this, "", 10.5f, 0xD9FFFFFF, Ui.BODY);
         heroSub.setSingleLine(true);
+        heroSub.setEllipsize(android.text.TextUtils.TruncateAt.END);
         text.addView(heroSub, lp(-2, -2, 5));
+        LinearLayout progress = row(); // bar, then "10 min left"
+        progress.setGravity(Gravity.CENTER_VERTICAL);
         heroBar = new FrameLayout(this);
-        text.addView(heroBar, lp(dp(220), dp(2.5f), 8));
+        progress.addView(heroBar, new LinearLayout.LayoutParams(dp(180), dp(2.5f)));
+        heroLeft = Ui.text(this, "", 9, 0xB3FFFFFF, Ui.BODY);
+        heroLeft.setPadding(dp(10), 0, 0, 0);
+        progress.addView(heroLeft);
+        text.addView(progress, lp(-2, -2, 8));
         View spacer = new View(this);
         text.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1));
         LinearLayout buttons = row();
@@ -372,7 +380,7 @@ public class HomeActivity extends Activity {
         buttons.addView(cleanPlayBtn, cp);
         text.addView(buttons);
         FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(-1, -1);
-        tlp.rightMargin = dp(150);
+        tlp.rightMargin = dp(150 * 16 / 9 - 40); // text stays clear of the artwork
         card.addView(text, tlp);
         r.addView(card, new LinearLayout.LayoutParams(0, -1, 1));
 
@@ -622,7 +630,8 @@ public class HomeActivity extends Activity {
             Apps.App a = repo.find(apps, w.pkg);
             heroKicker.setText(a == null ? "UP NEXT" : "UP NEXT  ·  " + a.label.toUpperCase(java.util.Locale.ROOT));
             heroTitle.setText(w.title);
-            heroSub.setText(w.meta == null || w.meta.isEmpty() ? "Pick up where you left off" : w.meta);
+            heroSub.setText(heroLine(w));
+            heroLeft.setText(w.left == null ? "" : w.left);
             if (w.progressPct > 0) heroBar.addView(new ProgressBarView(this, w.progressPct), new FrameLayout.LayoutParams(-1, -1));
             boolean show = w.posterUri != null || w.session != null; // we know the show, not just the app
             playBtn.setText(show ? "▶  Resume" : "▶  Open " + (a == null ? "app" : a.label));
@@ -631,12 +640,13 @@ public class HomeActivity extends Activity {
             // No poster: no logo either, just a soft glow in the app's own colour.
             heroArt.setImageDrawable(w.posterUri != null ? null : brandGlow(w.fallbackArt));
             if (w.posterUri != null) bg.execute(() -> {
-                Bitmap b = repo.loadPoster(w.posterUri, dp(300));
+                Bitmap b = trimBars(repo.loadPoster(w.posterUri, dp(300)));
                 if (b != null) ui.post(() -> {
                     if (heroWatch == w) heroArt.setImageBitmap(b);
                 });
             });
         } else if (featured == null) {
+            heroLeft.setText("");
             heroKicker.setText("GAME NIGHT");
             heroTitle.setText("No games yet");
             heroArt.setImageDrawable(null);
@@ -644,6 +654,7 @@ public class HomeActivity extends Activity {
             cleanPlayBtn.setVisibility(View.GONE);
             updateHeroSub();
         } else {
+            heroLeft.setText("");
             heroKicker.setText("GAME NIGHT");
             heroTitle.setText(Apps.FEATURED_GAME.equals(featured.pkg) ? "Beach Buggy Racing" : featured.label);
             heroArt.setImageDrawable(featured.banner);
@@ -662,13 +673,43 @@ public class HomeActivity extends Activity {
         heroSub.setText(extra + pads2);
     }
 
+    /** Crops black bars that some apps bake into their artwork, so the picture fills the billboard. */
+    private static Bitmap trimBars(Bitmap b) {
+        if (b == null) return null;
+        int w = b.getWidth(), h = b.getHeight(), left = 0, right = w - 1;
+        while (left < w / 3 && darkColumn(b, left, h)) left++;
+        while (right > w * 2 / 3 && darkColumn(b, right, h)) right--;
+        if (left == 0 && right == w - 1) return b;
+        return Bitmap.createBitmap(b, left, 0, right - left + 1, h);
+    }
+
+    private static boolean darkColumn(Bitmap b, int x, int h) {
+        for (int y = 0; y < h; y += Math.max(1, h / 24)) {
+            int p = b.getPixel(x, y);
+            if (((p >> 16) & 255) + ((p >> 8) & 255) + (p & 255) > 60) return false;
+        }
+        return true;
+    }
+
+    /** "S4 · E105 · The Battlefront of Alabasta!  ·  10 min left", from whatever the app shared. */
+    private static String heroLine(Apps.Continue w) {
+        List<String> parts = new ArrayList<>();
+        if (w.seasonEpisode != null && !w.seasonEpisode.isEmpty()) parts.add(w.seasonEpisode);
+        if (w.episode != null) parts.add(w.episode);
+        String line = android.text.TextUtils.join(" · ", parts);
+        if (line.isEmpty()) line = w.left != null ? "" : w.meta == null || w.meta.isEmpty() ? "Pick up where you left off" : w.meta;
+        return line;
+    }
+
     /** A radial glow in the most vivid colour of an app's banner (Netflix red, Prime blue). */
     private android.graphics.drawable.Drawable brandGlow(android.graphics.drawable.Drawable banner) {
         int color = Ui.ACCENT;
         if (banner != null) {
             Bitmap b = Bitmap.createBitmap(48, 27, Bitmap.Config.ARGB_8888);
+            android.graphics.Rect was = banner.copyBounds(); // the same drawable is on the app's tile
             banner.setBounds(0, 0, 48, 27);
             banner.draw(new android.graphics.Canvas(b));
+            banner.setBounds(was);
             float best = 0;
             float[] hsv = new float[3];
             for (int y = 0; y < 27; y++) {
