@@ -520,6 +520,7 @@ final class Scenes {
         String title, meta, app;
         int progressPct;
         Intent intent;
+        Intent[] resume; // see Apps.resumeIntents
         android.app.PendingIntent session; // the app's own way back to its player, when known
         Bitmap poster, blur;
     }

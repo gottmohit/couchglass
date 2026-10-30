@@ -123,6 +123,25 @@ public class Apps {
         return i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     }
 
+    /**
+     * How to resume a show. A link straight into an episode is opened on top of the app's normal
+     * start, and isn't kept once the player is up: some apps (Crunchyroll) re-read the link whenever
+     * you come back to the screen that received it, so Back would start the episode again instead
+     * of reaching profiles or the app's home.
+     */
+    public Intent[] resumeIntents(Continue w, List<App> apps) {
+        App a = apps == null ? null : find(apps, w.pkg);
+        Intent start = a != null ? launchIntent(a) : pm.getLeanbackLaunchIntentForPackage(w.pkg);
+        if (start == null && a == null) start = pm.getLaunchIntentForPackage(w.pkg);
+        Intent link = w.intent;
+        if (link == null) return start == null ? new Intent[0] : new Intent[]{new Intent(start).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)};
+        boolean deep = link.getData() != null || !Intent.ACTION_MAIN.equals(link.getAction());
+        if (!deep || start == null) return new Intent[]{new Intent(link).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)};
+        return new Intent[]{
+                new Intent(start).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                new Intent(link).addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY)};
+    }
+
     public App find(List<App> apps, String pkg) {
         for (App a : apps) if (a.pkg.equals(pkg)) return a;
         return null;

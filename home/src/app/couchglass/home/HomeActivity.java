@@ -808,12 +808,13 @@ public class HomeActivity extends Activity {
                 // The app closed its player: open the app instead.
             }
         }
-        Intent i = w.intent;
-        if (i == null) {
-            Apps.App a = repo.find(apps, w.pkg);
-            if (a != null) i = repo.launchIntent(a);
+        Intent[] steps = repo.resumeIntents(w, apps);
+        if (steps.length == 0) return;
+        try {
+            startActivities(steps);
+        } catch (Exception e) {
+            open(steps[steps.length - 1]); // the app refused the two-step start: just open the link
         }
-        if (i != null) open(new Intent(i).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     }
 
     // A controller plugged in (or switched off) changes the billboard straight away.
