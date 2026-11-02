@@ -123,6 +123,24 @@ public class Apps {
         return i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     }
 
+    /**
+     * A link to a show's own page in its app, from the rows the app publishes ("Most Popular" lists
+     * One Piece with a link to its series page). Null when the app doesn't list the show.
+     */
+    private Intent showPage(String pkg, String show) {
+        String[] cols = {TvContract.PreviewPrograms.COLUMN_PACKAGE_NAME, TvContract.PreviewPrograms.COLUMN_TITLE,
+                TvContract.PreviewPrograms.COLUMN_INTENT_URI};
+        try (Cursor c = context.getContentResolver().query(TvContract.PreviewPrograms.CONTENT_URI, cols, null, null, null)) {
+            while (c != null && c.moveToNext()) {
+                if (!pkg.equals(c.getString(0)) || !show.equalsIgnoreCase(nz(c.getString(1))) || c.getString(2) == null) continue;
+                android.util.Log.i("Couchglass", "show page for " + show + ": " + c.getString(2));
+                return Intent.parseUri(c.getString(2), Intent.URI_INTENT_SCHEME);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     /** A row an app publishes to the TV's home screen: "Most Popular" from Crunchyroll, and so on. */
     public static class Shelf {
         public String title, app, pkg;
@@ -331,7 +349,22 @@ public class Apps {
             // progress to Watch Next ("One Piece", S4 · E105): keep the rich card and add the episode.
             if (same != null && (same.title.equalsIgnoreCase(p.title) || p.when - same.when < 86_400_000L)) {
                 same.when = p.when;
-                if (!same.title.equalsIgnoreCase(p.title) && same.episode == null) same.episode = p.title;
+                boolean showName = same.title.equalsIgnoreCase(p.title);
+                if (!showName && same.episode == null) {
+                    same.episode = p.title;
+                } else if (!showName && !p.title.equalsIgnoreCase(same.episode)) {
+                    // A different episode played after the app last updated Watch Next (Crunchyroll's
+                    // entry can lag several episodes): its link points at an old episode. Show what
+                    // played, and open the show's page, whose Continue button knows the right one.
+                    same.episode = p.title;
+                    same.seasonEpisode = null;
+                    same.left = null;
+                    same.progressPct = -1;
+                    same.meta = p.title;
+                    Intent page = showPage(p.pkg, same.title);
+                    App a = find(apps, p.pkg);
+                    same.intent = page != null ? page : a != null ? launchIntent(a) : same.intent;
+                }
                 continue;
             }
             Continue w = new Continue();
